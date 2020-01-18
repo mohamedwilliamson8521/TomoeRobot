@@ -22,12 +22,8 @@ from haruka.modules.connection import connected
 
 PM_START = """Hello {}, my name is {}!
 
-I know what it's like to lose. To feel so desperately that you're right, yet to fail nonetheless. Dread it. Run from it.
-Destiny still arrives. Or should I say, I have.
+Enter welcome nibba .
 
-I'm world manager bot maintained by [this awesome person](https://t.me/HopSins)!
-
-Want to add me to your group? [Click here!](t.me/JohnnySins_TheBot?startgroup=true)
 
 Click (Help) button to find out more about how to use me to my full potential."""
 
@@ -175,7 +171,7 @@ def control_panel(bot, update):
 
         LOGGER.info(query.data)
     else:
-        M_match = "Johnny Sins is the best bot" #LMAO, don't uncomment
+        M_match = "MenheraChan is the best bot" #LMAO, don't uncomment
 
     if M_match:
         text = "*Control panel* 🛠"
