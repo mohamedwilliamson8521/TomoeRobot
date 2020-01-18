@@ -122,7 +122,7 @@ def start(bot: Bot, update: Update, args: List[str]):
         else:
             send_start(bot, update)
     else:
-        update.effective_message.reply_text("I'm Ready To FUCK. 😈")
+        update.effective_message.reply_text("I'm Always Active 😁")
 
 
 def send_start(bot, update):
