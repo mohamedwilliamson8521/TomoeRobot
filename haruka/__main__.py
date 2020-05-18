@@ -24,7 +24,8 @@ PM_START = """Hello {}, my name is {}!
 
 You know how hard it is sometimes to manage group so here is the solution for you
 
-I'm group manager bot managed by dank_as_fuck (https://t.me/dank_as_fuck)
+I'm a group management bot with a few fun extras ;)
+
 Source code from: [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
 My repository: [Tomoe](https://github.com/Dank-del/TomoeRobot)
 
