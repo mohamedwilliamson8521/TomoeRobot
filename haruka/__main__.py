@@ -22,10 +22,13 @@ from haruka.modules.connection import connected
 
 PM_START = """Hello {}, my name is {}!
 
-Enter welcome nibba .
+You know how hard it is sometimes to manage group so here is the solution for you
 
+I'm group manager bot managed by dank_as_fuck (https://t.me/dank_as_fuck)
+Source code from: [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
+My repository: [Tomoe](https://github.com/Dank-del/TomoeRobot)
 
-Click (Help) button to find out more about how to use me to my full potential."""
+Click /help or Help button below to find out more about how to use me to my full potential."""
 
 
 IMPORTED = {}
