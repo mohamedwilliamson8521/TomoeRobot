@@ -101,7 +101,7 @@ def new_member(bot: Bot, update: Update):
                     "I have been added to {} with ID: <pre>{}</pre>".format(chat.title, chat.id),
                     parse_mode=ParseMode.HTML
                 )
-                bot.send_message(chat.id, "I'm joined 😎, Please send some tities! 😋😍")
+                bot.send_message(chat.id, "Thanks for adding me! <3")
 
             else:
                 # If welcome message is media, send with appropriate function
