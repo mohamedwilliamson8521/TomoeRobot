@@ -1,13 +1,11 @@
-# Haruka
+# Tomoe
 A modular Telegram Python bot running on python3 with an sqlalchemy database.
 
-Can be found on telegram as [Haruka Aya](https://t.me/HarukaAyaBot).
+Can be found on telegram as [Tomoe](https://t.me/TheRealTomoeBot).
 
-Alternatively, [find me on telegram](https://t.me/peaktogoo)! (Keep all support questions in the support chat, where more people can help you.)
+A fork of [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
 
-You can also join our support group [here!](https://t.me/HarukaAyaBot)
-
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?=https://github.com/Dank-del/TomoeRobot)
 
 ## Thanks to
 
