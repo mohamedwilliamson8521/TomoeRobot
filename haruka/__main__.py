@@ -26,7 +26,7 @@ You know how hard it is sometimes to manage group so here is the solution for yo
 
 I'm a group management bot with a few fun extras ;)
 
-Source code from: [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
+A fork of [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
 My repository: [Tomoe](https://github.com/Dank-del/TomoeRobot)
 
 Click /help or Help button below to find out more about how to use me to my full potential."""
