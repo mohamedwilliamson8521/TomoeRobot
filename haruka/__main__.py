@@ -27,7 +27,7 @@ I'm a group management bot with a few fun extras ;)
 A fork of [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
 My repository: [Tomoe](https://github.com/Dank-del/TomoeRobot)
 
-Click /help or Help button below to find out more about how to use me to my full potential."""
+Click the Help button below to find out more about how to use me to my full potential."""
 
 
 IMPORTED = {}
