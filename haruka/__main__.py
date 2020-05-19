@@ -22,7 +22,14 @@ from haruka.modules.connection import connected
 
 PM_START = """Hello {}, my name is {}!
 
-You know how hard it is sometimes to manage group so here is the solution for you
+
+  ______                         
+ /_  __/___  ____ ___  ____  ___ 
+  / / / __ \/ __ `__ \/ __ \/ _ \
+ / / / /_/ / / / / / / /_/ /  __/
+/_/  \____/_/ /_/ /_/\____/\___/ 
+                                 
+
 
 I'm a group management bot with a few fun extras ;)
 
