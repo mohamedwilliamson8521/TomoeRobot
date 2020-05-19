@@ -62,6 +62,7 @@ if ENV:
     ALLOW_EXCL = os.environ.get('ALLOW_EXCL', False)
     API_WEATHER = os.environ.get('API_OPENWEATHER', None)
     LASTFM_API_KEY = os.environ.get('LASTFM_API_KEY', None)
+    AI_API_KEY = os.environ.get('AI_API_KEY', None)
 
 
 else:

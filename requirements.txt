@@ -27,3 +27,4 @@ googletrans
 alphabet_detector
 jikanpy
 tswift
+coffeehouse
