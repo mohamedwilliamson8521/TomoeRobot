@@ -26,3 +26,4 @@ wikipedia
 googletrans
 alphabet_detector
 jikanpy
+tswift

@@ -61,6 +61,8 @@ if ENV:
     BAN_STICKER = os.environ.get('BAN_STICKER', 'CAADAgADEAgAAgi3GQL9YQyT_kBpQwI')
     ALLOW_EXCL = os.environ.get('ALLOW_EXCL', False)
     API_WEATHER = os.environ.get('API_OPENWEATHER', None)
+    LASTFM_API_KEY = os.environ.get('LASTFM_API_KEY', None)
+
 
 else:
     from haruka.config import Development as Config
