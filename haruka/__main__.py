@@ -21,15 +21,7 @@ from haruka.modules.translations.strings import tld, tld_help
 from haruka.modules.connection import connected
 
 PM_START = """Hello {}, my name is {}!
-ooooo                              
-  8                                
-  8   .oPYo. ooYoYo. .oPYo. .oPYo. 
-  8   8    8 8' 8  8 8    8 8oooo8 
-  8   8    8 8  8  8 8    8 8.     
-  8   `YooP' 8  8  8 `YooP' `Yooo' 
-::..:::.....:..:..:..:.....::.....:
-:::::::::::::::::::::::::::::::::::
-:::::::::::::::::::::::::::::::::::
+
 I'm a group management bot with a few fun extras ;)
 
 A fork of [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
