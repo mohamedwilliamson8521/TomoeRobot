@@ -28,4 +28,3 @@ alphabet_detector
 jikanpy
 tswift
 coffeehouse
-nekos.py
