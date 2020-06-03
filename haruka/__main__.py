@@ -28,6 +28,8 @@ My repository: [Tomoe](https://github.com/Dank-del/TomoeRobot)
 
 Click the Help button below to find out more about how to use me to my full potential."""
 
+TOMOE_IMG = "https://telegra.ph/file/4ad41bc0b38eee0dd3076.jpg"
+
 
 IMPORTED = {}
 MIGRATEABLE = []
@@ -136,6 +138,7 @@ def send_start(bot, update):
 
     chat = update.effective_chat  # type: Optional[Chat]
     first_name = update.effective_user.first_name 
+    update.effective_message.reply_photo(TOMOE_IMG,
     text = PM_START
 
 
