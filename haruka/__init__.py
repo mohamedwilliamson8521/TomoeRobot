@@ -64,6 +64,7 @@ if ENV:
     LASTFM_API_KEY = os.environ.get('LASTFM_API_KEY', None)
     AI_API_KEY = os.environ.get('AI_API_KEY', None)
     WALL_API = os.environ.get('WALL_API', "")
+    spamwatch_api = CONFIG['sw_api']
 
 
 else:
