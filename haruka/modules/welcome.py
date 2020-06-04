@@ -1,442 +1,553 @@
-import html, time
-import re
-from typing import Optional, List
+#    Haruka Aya (A telegram bot project)
+#    Copyright (C) 2017-2019 Paul Larsen
+#    Copyright (C) 2019-2020 Akito Mizukito (Haruka Network Development)
 
-from telegram import Message, Chat, Update, Bot, User, CallbackQuery
-from telegram import ParseMode, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.error import BadRequest
-from telegram.ext import MessageHandler, Filters, CommandHandler, run_async, CallbackQueryHandler
-from telegram.utils.helpers import mention_markdown, mention_html, escape_markdown
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
 
-import haruka.modules.sql.welcome_sql as sql
-from haruka import dispatcher, OWNER_ID, LOGGER, MESSAGE_DUMP
-from haruka.modules.helper_funcs.chat_status import user_admin, is_user_ban_protected
-from haruka.modules.helper_funcs.misc import build_keyboard, revert_buttons
-from haruka.modules.helper_funcs.msg_types import get_welcome_type
-from haruka.modules.helper_funcs.string_handling import markdown_parser, \
-    escape_invalid_curly_brackets
-from haruka.modules.log_channel import loggable
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
 
-from haruka.modules.feds import welcome_fed
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import random, re, io, asyncio
+from PIL import Image
+from io import BytesIO
+from spongemock import spongemock
+from zalgo_text import zalgo
+from deeppyer import deepfry
+import os
+from pathlib import Path
+import glob
 
-VALID_WELCOME_FORMATTERS = ['first', 'last', 'fullname', 'username', 'id', 'count', 'chatname', 'mention']
+from typing import List
+from telegram import Update, Bot, ParseMode, Message
+from telegram.ext import run_async
 
-ENUM_FUNC_MAP = {
-    sql.Types.TEXT.value: dispatcher.bot.send_message,
-    sql.Types.BUTTON_TEXT.value: dispatcher.bot.send_message,
-    sql.Types.STICKER.value: dispatcher.bot.send_sticker,
-    sql.Types.DOCUMENT.value: dispatcher.bot.send_document,
-    sql.Types.PHOTO.value: dispatcher.bot.send_photo,
-    sql.Types.AUDIO.value: dispatcher.bot.send_audio,
-    sql.Types.VOICE.value: dispatcher.bot.send_voice,
-    sql.Types.VIDEO.value: dispatcher.bot.send_video
-}
+from haruka import dispatcher, DEEPFRY_TOKEN, LOGGER
+from haruka.modules.disable import DisableAbleCommandHandler
+from telegram.utils.helpers import escape_markdown
+from haruka.modules.helper_funcs.extraction import extract_user
+from haruka.modules.tr_engine.strings import tld, tld_list
 
+WIDE_MAP = dict((i, i + 0xFEE0) for i in range(0x21, 0x7F))
+WIDE_MAP[0x20] = 0x3000
 
-# do not async
-def send(update, message, keyboard, backup_message):
-    try:
-        msg = update.effective_message.reply_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard, disable_web_page_preview=True)
-    except IndexError:
-        msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                  "\nNote: the current message was "
-                                                                  "invalid due to markdown issues. Could be "
-                                                                  "due to the user's name."),
-                                                  parse_mode=ParseMode.MARKDOWN)
-    except KeyError:
-        msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                  "\nNote: the current message is "
-                                                                  "invalid due to an issue with some misplaced "
-                                                                  "curly brackets. Please update"),
-                                                  parse_mode=ParseMode.MARKDOWN)
-    except BadRequest as excp:
-        if excp.message == "Button_url_invalid":
-            msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                      "\nNote: the current message has an invalid url "
-                                                                      "in one of its buttons. Please update."),
-                                                      parse_mode=ParseMode.MARKDOWN)
-        elif excp.message == "Unsupported url protocol":
-            msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                      "\nNote: the current message has buttons which "
-                                                                      "use url protocols that are unsupported by "
-                                                                      "telegram. Please update."),
-                                                      parse_mode=ParseMode.MARKDOWN)
-        elif excp.message == "Wrong url host":
-            msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                      "\nNote: the current message has some bad urls. "
-                                                                      "Please update."),
-                                                      parse_mode=ParseMode.MARKDOWN)
-            LOGGER.warning(message)
-            LOGGER.warning(keyboard)
-            LOGGER.exception("Could not parse! got invalid url host errors")
-        else:
-            msg = update.effective_message.reply_text(markdown_parser(backup_message +
-                                                                      "\nNote: An error occured when sending the "
-                                                                      "custom message. Please update."),
-                                                      parse_mode=ParseMode.MARKDOWN)
-            LOGGER.exception()
-
-    return msg
+# D A N K modules by @deletescape vvv
 
 
 @run_async
-def new_member(bot: Bot, update: Update):
-    chat = update.effective_chat  # type: Optional[Chat]
+def owo(bot: Bot, update: Update, args: List[str]):
+    chat = update.effective_chat
+    message = update.effective_message
 
-    should_welc, cust_welcome, welc_type = sql.get_welc_pref(chat.id)
-    if should_welc:
-        sent = None
-        new_members = update.effective_message.new_chat_members
-        for new_mem in new_members:
-            # Give the owner a special welcome
-            if new_mem.id == OWNER_ID:
-                bot.send_message(chat.id, "Hi. My Godfather just joined the group, Please behave on yourself 😒")
-                continue
-
-            # Give start information when add bot to group
-            elif new_mem.id == bot.id:
-                bot.send_message(
-                    MESSAGE_DUMP,
-                    "I have been added to {} with ID: <pre>{}</pre>".format(chat.title, chat.id),
-                    parse_mode=ParseMode.HTML
-                )
-                bot.send_message(chat.id, "Thanks for adding me! <3")
-
-            else:
-                # If welcome message is media, send with appropriate function
-                if welc_type != sql.Types.TEXT and welc_type != sql.Types.BUTTON_TEXT:
-                    ENUM_FUNC_MAP[welc_type](chat.id, cust_welcome)
-                    return
-                # else, move on
-                first_name = new_mem.first_name or "PersonWithNoName"  # edge case of empty name - occurs for some bugs.
-
-                if cust_welcome:
-                    if new_mem.last_name:
-                        fullname = "{} {}".format(first_name, new_mem.last_name)
-                    else:
-                        fullname = first_name
-                    count = chat.get_members_count()
-                    mention = mention_markdown(new_mem.id, escape_markdown(first_name))
-                    if new_mem.username:
-                        username = "@" + escape_markdown(new_mem.username)
-                    else:
-                        username = mention
-
-                    valid_format = escape_invalid_curly_brackets(cust_welcome, VALID_WELCOME_FORMATTERS)
-                    res = valid_format.format(first=escape_markdown(first_name),
-                                              last=escape_markdown(new_mem.last_name or first_name),
-                                              fullname=escape_markdown(fullname), username=username, mention=mention,
-                                              count=count, chatname=escape_markdown(chat.title), id=new_mem.id)
-                    buttons = sql.get_welc_buttons(chat.id)
-                    keyb = build_keyboard(buttons)
-                else:
-                    res = sql.DEFAULT_WELCOME.format(first=first_name)
-                    keyb = []
-
-                keyboard = InlineKeyboardMarkup(keyb)
-
-                sent = send(update, res, keyboard,
-                            sql.DEFAULT_WELCOME.format(first=first_name))  # type: Optional[Message]
-
-                #Federations Ban
-                if welcome_fed(bot, update) == True:
-                    continue
-
-                #Clean service welcome
-                if sql.clean_service(chat.id) == True:
-                    bot.delete_message(chat.id, update.message.message_id)
-
-                #If user ban protected don't apply security on him
-                if is_user_ban_protected(chat, new_mem.id, chat.get_member(new_mem.id)):
-                    continue
-
-                #Security soft mode
-                if sql.welcome_security(chat.id) == "soft":
-                    bot.restrict_chat_member(chat.id, new_mem.id, can_send_messages=True, can_send_media_messages=False, can_send_other_messages=False, can_add_web_page_previews=False, until_date=(int(time.time() + 24 * 60 * 60)))
-
-                #Add "I'm not bot button if enabled hard security"
-                if sql.welcome_security(chat.id) == "hard":
-                    update.effective_message.reply_text("Hi {}, click on button below to prove you not a bot.".format(new_mem.first_name),
-                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text="✅ Click here to talk ✅ ",
-                         callback_data="check_bot_({})".format(new_mem.id)) ]]))
-                    #Mute user
-                    bot.restrict_chat_member(chat.id, new_mem.id, can_send_messages=False, can_send_media_messages=False, can_send_other_messages=False, can_add_web_page_previews=False)
-
-
-        prev_welc = sql.get_clean_pref(chat.id)
-        if prev_welc:
-            try:
-                bot.delete_message(chat.id, prev_welc)
-            except BadRequest as excp:
-                pass
-
-            if sent:
-                sql.set_clean_welcome(chat.id, sent.message_id)
-
-
-@run_async
-def check_bot_button(bot: Bot, update: Update):
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-    query = update.callback_query  # type: Optional[CallbackQuery]
-    #bot.restrict_chat_member(chat.id, new_mem.id, can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True)))
-    match = re.match(r"check_bot_\((.+?)\)", query.data)
-    user_id = int(match.group(1))
-    message = update.effective_message  # type: Optional[Message]
-    print(message)
-    print(match, user.id, user_id)
-    if user_id == user.id:
-        print("YES")
-        query.answer(text="Unmuted!")
-        #Unmute user
-        bot.restrict_chat_member(chat.id, user.id, can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True)
-        bot.deleteMessage(chat.id, message.message_id)
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
     else:
-        print("NO")
-        query.answer(text="You're not a new user!")
-    #TODO need kick users after 2 hours and remove message 
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
-@run_async
-def left_member(bot: Bot, update: Update):
-    chat = update.effective_chat  # type: Optional[Chat]
-    should_goodbye, cust_goodbye, goodbye_type = sql.get_gdbye_pref(chat.id)
-    if should_goodbye:
-        left_mem = update.effective_message.left_chat_member
-        if left_mem:
+    faces = [
+        '(・`ω´・)', ';;w;;', 'owo', 'UwU', '>w<', '^w^', '\(^o\) (/o^)/',
+        '( ^ _ ^)∠☆', '(ô_ô)', '~:o', ';____;', '(*^*)', '(>_', '(♥_♥)',
+        '*(^O^)*', '((+_+))'
+    ]
+    reply_text = re.sub(r'[rl]', "w", data)
+    reply_text = re.sub(r'[ｒｌ]', "ｗ", data)
+    reply_text = re.sub(r'[RL]', 'W', reply_text)
+    reply_text = re.sub(r'[ＲＬ]', 'Ｗ', reply_text)
+    reply_text = re.sub(r'n([aeiouａｅｉｏｕ])', r'ny\1', reply_text)
+    reply_text = re.sub(r'ｎ([ａｅｉｏｕ])', r'ｎｙ\1', reply_text)
+    reply_text = re.sub(r'N([aeiouAEIOU])', r'Ny\1', reply_text)
+    reply_text = re.sub(r'Ｎ([ａｅｉｏｕＡＥＩＯＵ])', r'Ｎｙ\1', reply_text)
+    reply_text = re.sub(r'\!+', ' ' + random.choice(faces), reply_text)
+    reply_text = re.sub(r'！+', ' ' + random.choice(faces), reply_text)
+    reply_text = reply_text.replace("ove", "uv")
+    reply_text = reply_text.replace("ｏｖｅ", "ｕｖ")
+    reply_text += ' ' + random.choice(faces)
 
-            # Ignore bot being kicked
-            if left_mem.id == bot.id:
-                return
-
-            # Give the owner a special goodbye
-            if left_mem.id == OWNER_ID:
-                update.effective_message.reply_text("RIP Master")
-                return
-
-            # if media goodbye, use appropriate function for it
-            if goodbye_type != sql.Types.TEXT and goodbye_type != sql.Types.BUTTON_TEXT:
-                ENUM_FUNC_MAP[goodbye_type](chat.id, cust_goodbye)
-                return
-
-            first_name = left_mem.first_name or "PersonWithNoName"  # edge case of empty name - occurs for some bugs.
-            if cust_goodbye:
-                if left_mem.last_name:
-                    fullname = "{} {}".format(first_name, left_mem.last_name)
-                else:
-                    fullname = first_name
-                count = chat.get_members_count()
-                mention = mention_markdown(left_mem.id, escape_markdown(first_name))
-                if left_mem.username:
-                    username = "@" + escape_markdown(left_mem.username)
-                else:
-                    username = mention
-
-                valid_format = escape_invalid_curly_brackets(cust_goodbye, VALID_WELCOME_FORMATTERS)
-                res = valid_format.format(first=escape_markdown(first_name),
-                                          last=escape_markdown(left_mem.last_name or first_name),
-                                          fullname=escape_markdown(fullname), username=username, mention=mention,
-                                          count=count, chatname=escape_markdown(chat.title), id=left_mem.id)
-                buttons = sql.get_gdbye_buttons(chat.id)
-                keyb = build_keyboard(buttons)
-
-            else:
-                res = sql.DEFAULT_GOODBYE
-                keyb = []
-
-            keyboard = InlineKeyboardMarkup(keyb)
-
-            send(update, res, keyboard, sql.DEFAULT_GOODBYE)
-
-            #Clean service goodbye
-            if sql.clean_service(chat.id) == True:
-                bot.delete_message(chat.id, update.message.message_id)
+    if noreply:
+        message.reply_text(reply_text)
+    else:
+        message.reply_to_message.reply_text(reply_text)
 
 
 @run_async
-@user_admin
-def welcome(bot: Bot, update: Update, args: List[str]):
-    chat = update.effective_chat  # type: Optional[Chat]
-    # if no args, show current replies.
-    if len(args) == 0 or args[0].lower() == "noformat":
-        noformat = args and args[0].lower() == "noformat"
-        pref, welcome_m, welcome_type = sql.get_welc_pref(chat.id)
-        update.effective_message.reply_text(
-            "This chat has it's welcome setting set to: `{}`.\n*The welcome message "
-            "(not filling the {{}}) is:*".format(pref),
-            parse_mode=ParseMode.MARKDOWN)
+def stretch(bot: Bot, update: Update, args: List[str]):
+    chat = update.effective_chat
+    message = update.effective_message
 
-        if welcome_type == sql.Types.BUTTON_TEXT:
-            buttons = sql.get_welc_buttons(chat.id)
-            if noformat:
-                welcome_m += revert_buttons(buttons)
-                update.effective_message.reply_text(welcome_m)
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
-            else:
-                keyb = build_keyboard(buttons)
-                keyboard = InlineKeyboardMarkup(keyb)
+    count = random.randint(3, 10)
+    reply_text = re.sub(r'([aeiouAEIOUａｅｉｏｕＡＥＩＯＵ])', (r'\1' * count), data)
 
-                send(update, welcome_m, keyboard, sql.DEFAULT_WELCOME)
+    if noreply:
+        message.reply_text(reply_text)
+    else:
+        message.reply_to_message.reply_text(reply_text)
 
+
+@run_async
+def vapor(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
+
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
+
+    reply_text = str(data).translate(WIDE_MAP)
+
+    if noreply:
+        message.reply_text(reply_text)
+    else:
+        message.reply_to_message.reply_text(reply_text)
+
+
+# D A N K modules by @deletescape ^^^
+# Less D A N K modules by @skittles9823 # holi fugg I did some maymays vvv
+
+
+@run_async
+def mafiatext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
+
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
+
+    if not Path('images/mafia.jpg').is_file():
+        LOGGER.warning(
+            "images/mafia.jpg not found! Mafia memes module is turned off!")
+        return
+
+    for mocked in glob.glob("images/mafiaed*"):
+        os.remove(mocked)
+    reply_text = spongemock.mock(data)
+
+    randint = random.randint(1, 699)
+    magick = """convert images/mafia.jpg -font Impact -pointsize 50 -size 1280x720 -stroke white -strokewidth 1 -fill black -background none -gravity north caption:"{}" -flatten images/mafiaed{}.jpg""".format(
+        reply_text, randint)
+    os.system(magick)
+    with open('images/mafiaed{}.jpg'.format(randint), 'rb') as mockedphoto:
+        if noreply:
+            message.reply_photo(photo=mockedphoto,
+                                reply=message.reply_to_message)
         else:
-            if noformat:
-                ENUM_FUNC_MAP[welcome_type](chat.id, welcome_m)
+            message.reply_to_message.reply_photo(
+                photo=mockedphoto, reply=message.reply_to_message)
+    os.remove('images/mafiaed{}.jpg'.format(randint))
 
-            else:
-                ENUM_FUNC_MAP[welcome_type](chat.id, welcome_m, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
-    elif len(args) >= 1:
-        if args[0].lower() in ("on", "yes", "yas"):
-            sql.set_welc_preference(str(chat.id), True)
-            update.effective_message.reply_text("I'll be polite!")
+@run_async
+def pidortext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
 
-        elif args[0].lower() in ("off", "no", "nou"):
-            sql.set_welc_preference(str(chat.id), False)
-            update.effective_message.reply_text("I'm sulking, not saying hello anymore.")
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
+    if not Path('images/4pda.jpg').is_file():
+        LOGGER.warning(
+            "images/4pda.jpg not found! Pidor memes module is turned off!")
+        return
+    for mocked in glob.glob("images/4pdaed*"):
+        os.remove(mocked)
+    reply_text = spongemock.mock(data)
+
+    randint = random.randint(1, 699)
+    magick = """convert images/4pda.jpg -font Impact -pointsize 50 -size 400x300 -stroke black -strokewidth 1 -fill white -background none -gravity north caption:"{}" -flatten images/4pdaed{}.jpg""".format(
+        reply_text, randint)
+    os.system(magick)
+    with open('images/4pdaed{}.jpg'.format(randint), 'rb') as mockedphoto:
+        if noreply:
+            message.reply_photo(photo=mockedphoto,
+                                reply=message.reply_to_message)
         else:
-            # idek what you're writing, say yes or no
-            update.effective_message.reply_text("I understand 'on/yes/yas' or 'off/no/nou' only!")
+            message.reply_to_message.reply_photo(
+                photo=mockedphoto, reply=message.reply_to_message)
+    os.remove('images/4pdaed{}.jpg'.format(randint))
 
 
 @run_async
-@user_admin
-def goodbye(bot: Bot, update: Update, args: List[str]):
-    chat = update.effective_chat  # type: Optional[Chat]
+def kimtext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
 
-    if len(args) == 0 or args[0] == "noformat":
-        noformat = args and args[0] == "noformat"
-        pref, goodbye_m, goodbye_type = sql.get_gdbye_pref(chat.id)
-        update.effective_message.reply_text(
-            "This chat has it's goodbye setting set to: `{}`.\n*The goodbye  message "
-            "(not filling the {{}}) is:*".format(pref),
-            parse_mode=ParseMode.MARKDOWN)
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
-        if goodbye_type == sql.Types.BUTTON_TEXT:
-            buttons = sql.get_gdbye_buttons(chat.id)
-            if noformat:
-                goodbye_m += revert_buttons(buttons)
-                update.effective_message.reply_text(goodbye_m)
+    if not Path('images/kim.jpg').is_file():
+        LOGGER.warning(
+            "images/kim.jpg not found! Kim memes module is turned off!")
+        return
+    for mocked in glob.glob("kimed*"):
+        os.remove(mocked)
+    reply_text = spongemock.mock(data)
 
-            else:
-                keyb = build_keyboard(buttons)
-                keyboard = InlineKeyboardMarkup(keyb)
-
-                send(update, goodbye_m, keyboard, sql.DEFAULT_GOODBYE)
-
+    randint = random.randint(1, 699)
+    magick = """convert images/kim.jpg -font Impact -pointsize 50 -size 480x360 -stroke black -strokewidth 1 -fill white -background none -gravity north caption:"{}" -flatten images/kimed{}.jpg""".format(
+        reply_text, randint)
+    os.system(magick)
+    with open('images/kimed{}.jpg'.format(randint), 'rb') as mockedphoto:
+        if noreply:
+            message.reply_photo(photo=mockedphoto,
+                                reply=message.reply_to_message)
         else:
-            if noformat:
-                ENUM_FUNC_MAP[goodbye_type](chat.id, goodbye_m)
+            message.reply_to_message.reply_photo(
+                photo=mockedphoto, reply=message.reply_to_message)
+    os.remove('images/kimed{}.jpg'.format(randint))
 
-            else:
-                ENUM_FUNC_MAP[goodbye_type](chat.id, goodbye_m, parse_mode=ParseMode.MARKDOWN)
 
-    elif len(args) >= 1:
-        if args[0].lower() in ("on", "yes"):
-            sql.set_gdbye_preference(str(chat.id), True)
-            update.effective_message.reply_text("I'll be sorry when people leave!")
+@run_async
+def hitlertext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
 
-        elif args[0].lower() in ("off", "no"):
-            sql.set_gdbye_preference(str(chat.id), False)
-            update.effective_message.reply_text("They leave, they're dead to me.")
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
+    if not Path('images/hitler.jpg').is_file():
+        LOGGER.warning(
+            "images/hitler.jpg not found! Hitler memes module is turned off!")
+        return
+    for mocked in glob.glob("images/hitlered*"):
+        os.remove(mocked)
+    reply_text = spongemock.mock(data)
+
+    randint = random.randint(1, 699)
+    magick = """convert images/hitler.jpg -font Impact -pointsize 50 -size 615x409 -stroke black -strokewidth 1 -fill white -background none -gravity north caption:"{}" -flatten images/hitlered{}.jpg""".format(
+        reply_text, randint)
+    os.system(magick)
+    with open('images/hitlered{}.jpg'.format(randint), 'rb') as mockedphoto:
+        if noreply:
+            message.reply_photo(photo=mockedphoto,
+                                reply=message.reply_to_message)
         else:
-            # idek what you're writing, say yes or no
-            update.effective_message.reply_text("I understand 'on/yes' or 'off/no' only!")
+            message.reply_to_message.reply_photo(
+                photo=mockedphoto, reply=message.reply_to_message)
+    os.remove('images/hitlered{}.jpg'.format(randint))
 
 
 @run_async
-@user_admin
-@loggable
-def set_welcome(bot: Bot, update: Update) -> str:
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-    msg = update.effective_message  # type: Optional[Message]
+def spongemocktext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
 
-    text, data_type, content, buttons = get_welcome_type(msg)
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
 
-    if data_type is None:
-        msg.reply_text("You didn't specify what to reply with!")
-        return ""
+    if not Path('images/bob.jpg').is_file():
+        LOGGER.warning(
+            "images/bob.jpg not found! Spongemock memes module is turned off!")
+        return
+    for mocked in glob.glob("images/mocked*"):
+        os.remove(mocked)
+    reply_text = spongemock.mock(data)
 
-    sql.set_custom_welcome(chat.id, content or text, data_type, buttons)
-    msg.reply_text("Successfully set custom welcome message!")
-
-    return "<b>{}:</b>" \
-           "\n#SET_WELCOME" \
-           "\n<b>Admin:</b> {}" \
-           "\nSet the welcome message.".format(html.escape(chat.title),
-                                               mention_html(user.id, user.first_name))
-
-
-@run_async
-@user_admin
-@loggable
-def reset_welcome(bot: Bot, update: Update) -> str:
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-    sql.set_custom_welcome(chat.id, sql.DEFAULT_WELCOME, sql.Types.TEXT)
-    update.effective_message.reply_text("Successfully reset welcome message to default!")
-    return "<b>{}:</b>" \
-           "\n#RESET_WELCOME" \
-           "\n<b>Admin:</b> {}" \
-           "\nReset the welcome message to default.".format(html.escape(chat.title),
-                                                            mention_html(user.id, user.first_name))
-
-
-@run_async
-@user_admin
-@loggable
-def set_goodbye(bot: Bot, update: Update) -> str:
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-    msg = update.effective_message  # type: Optional[Message]
-    text, data_type, content, buttons = get_welcome_type(msg)
-
-    if data_type is None:
-        msg.reply_text("You didn't specify what to reply with!")
-        return ""
-
-    sql.set_custom_gdbye(chat.id, content or text, data_type, buttons)
-    msg.reply_text("Successfully set custom goodbye message!")
-    return "<b>{}:</b>" \
-           "\n#SET_GOODBYE" \
-           "\n<b>Admin:</b> {}" \
-           "\nSet the goodbye message.".format(html.escape(chat.title),
-                                               mention_html(user.id, user.first_name))
-
-
-@run_async
-@user_admin
-@loggable
-def reset_goodbye(bot: Bot, update: Update) -> str:
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-    sql.set_custom_gdbye(chat.id, sql.DEFAULT_GOODBYE, sql.Types.TEXT)
-    update.effective_message.reply_text("Successfully reset goodbye message to default!")
-    return "<b>{}:</b>" \
-           "\n#RESET_GOODBYE" \
-           "\n<b>Admin:</b> {}" \
-           "\nReset the goodbye message.".format(html.escape(chat.title),
-                                                 mention_html(user.id, user.first_name))
-
-
-@run_async
-@user_admin
-@loggable
-def clean_welcome(bot: Bot, update: Update, args: List[str]) -> str:
-    chat = update.effective_chat  # type: Optional[Chat]
-    user = update.effective_user  # type: Optional[User]
-
-    if not args:
-        clean_pref = sql.get_clean_pref(chat.id)
-        if clean_pref:
-            update.effective_message.reply_text("I should be deleting welcome messages up to two days old.")
+    randint = random.randint(1, 699)
+    magick = """convert images/bob.jpg -font Impact -pointsize 30 -size 512x300 -stroke black -strokewidth 1 -fill white -background none -gravity north caption:"{}" -flatten images/mocked{}.jpg""".format(
+        reply_text, randint)
+    os.system(magick)
+    with open('images/mocked{}.jpg'.format(randint), 'rb') as mockedphoto:
+        if noreply:
+            message.reply_photo(photo=mockedphoto,
+                                reply=message.reply_to_message)
         else:
-            update.effective_message.reply_text("I'm currently not deleting old welcome messages!")
-        return ""
+            message.reply_to_message.reply_photo(
+                photo=mockedphoto, reply=message.reply_to_message)
+    os.remove('images/mocked{}.jpg'.format(randint))
 
-    if args[0].lower() in ("on", "yes"):
+
+@run_async
+def zalgotext(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
+
+    noreply = False
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        noreply = True
+        data = message.text.split(None, 1)[1]
+    else:
+        noreply = True
+        data = tld(chat.id, "memes_no_message")
+
+    reply_text = zalgo.zalgo().zalgofy(data)
+    if noreply:
+        message.reply_text(reply_text)
+    else:
+        message.reply_to_message.reply_text(reply_text)
+
+
+# Less D A N K modules by @skittles9823 # holi fugg I did some maymays ^^^
+# shitty maymay modules made by @divadsn vvv
+
+
+@run_async
+def deepfryer(bot: Bot, update: Update):
+    message = update.effective_message
+    chat = update.effective_chat
+    if message.reply_to_message:
+        data = message.reply_to_message.photo
+        data2 = message.reply_to_message.sticker
+    else:
+        data = []
+        data2 = []
+
+    # check if message does contain media and cancel when not
+    if not data and not data2:
+        message.reply_text(tld(chat.id, "memes_deepfry_nothing"))
+        return
+
+    # download last photo (highres) as byte array
+    if data:
+        photodata = data[len(data) - 1].get_file().download_as_bytearray()
+        image = Image.open(io.BytesIO(photodata))
+    elif data2:
+        sticker = bot.get_file(data2.file_id)
+        sticker.download('sticker.png')
+        image = Image.open("sticker.png")
+
+    # the following needs to be executed async (because dumb lib)
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(
+        process_deepfry(image, message.reply_to_message, bot))
+    loop.close()
+
+
+async def process_deepfry(image: Image, reply: Message, bot: Bot):
+    # DEEPFRY IT
+    image = await deepfry(img=image,
+                          token=DEEPFRY_TOKEN,
+                          url_base='westeurope')
+
+    bio = BytesIO()
+    bio.name = 'image.jpeg'
+    image.save(bio, 'JPEG')
+
+    # send it back
+    bio.seek(0)
+    reply.reply_photo(bio)
+    if Path("sticker.png").is_file():
+        os.remove("sticker.png")
+
+
+# shitty maymay modules made by @divadsn ^^^
+
+
+@run_async
+def shout(bot: Bot, update: Update, args: List[str]):
+    message = update.effective_message
+    chat = update.effective_chat
+
+    if message.reply_to_message:
+        data = message.reply_to_message.text
+    elif args:
+        data = " ".join(args)
+    else:
+        data = tld(chat.id, "memes_no_message")
+
+    msg = "```"
+    result = []
+    result.append(' '.join([s for s in data]))
+    for pos, symbol in enumerate(data[1:]):
+        result.append(symbol + ' ' + '  ' * pos + symbol)
+    result = list("\n".join(result))
+    result[0] = data[0]
+    result = "".join(result)
+    msg = "```\n" + result + "```"
+    return update.effective_message.reply_text(msg, parse_mode="MARKDOWN")
+
+
+@run_async
+def insults(bot: Bot, update: Update):
+    message = update.effective_message
+    chat = update.effective_chat
+    text = random.choice(tld_list(chat.id, "memes_insults_list"))
+
+    if message.reply_to_message:
+        message.reply_to_message.reply_text(text)
+    else:
+        message.reply_text(text)
+
+
+@run_async
+def runs(bot: Bot, update: Update):
+    chat = update.effective_chat
+    update.effective_message.reply_text(
+        random.choice(tld_list(chat.id, "memes_runs_list")))
+
+
+@run_async
+def slap(bot: Bot, update: Update, args: List[str]):
+    chat = update.effective_chat
+    msg = update.effective_message
+
+    # reply to correct message
+    reply_text = msg.reply_to_message.reply_text if msg.reply_to_message else msg.reply_text
+
+    # get user who sent message
+    if msg.from_user.username:
+        curr_user = "@" + escape_markdown(msg.from_user.username)
+    else:
+        curr_user = "[{}](tg://user?id={})".format(msg.from_user.first_name,
+                                                   msg.from_user.id)
+
+    user_id = extract_user(update.effective_message, args)
+    if user_id:
+        slapped_user = bot.get_chat(user_id)
+        user1 = curr_user
+        if slapped_user.username == "RealAkito":
+            reply_text(tld(chat.id, "memes_not_doing_that"))
+            return
+        if slapped_user.username:
+            user2 = "@" + escape_markdown(slapped_user.username)
+        else:
+            user2 = "[{}](tg://user?id={})".format(slapped_user.first_name,
+                                                   slapped_user.id)
+
+    # if no target found, bot targets the sender
+    else:
+        user1 = "[{}](tg://user?id={})".format(bot.first_name, bot.id)
+        user2 = curr_user
+
+    temp = random.choice(tld_list(chat.id, "memes_slaps_templates_list"))
+    item = random.choice(tld_list(chat.id, "memes_items_list"))
+    hit = random.choice(tld_list(chat.id, "memes_hit_list"))
+    throw = random.choice(tld_list(chat.id, "memes_throw_list"))
+    itemp = random.choice(tld_list(chat.id, "memes_items_list"))
+    itemr = random.choice(tld_list(chat.id, "memes_items_list"))
+
+    repl = temp.format(user1=user1,
+                       user2=user2,
+                       item=item,
+                       hits=hit,
+                       throws=throw,
+                       itemp=itemp,
+                       itemr=itemr)
+
+    reply_text(repl, parse_mode=ParseMode.MARKDOWN)
+
+
+__help__ = True
+
+OWO_HANDLER = DisableAbleCommandHandler("owo",
+                                        owo,
+                                        admin_ok=True,
+                                        pass_args=True)
+STRETCH_HANDLER = DisableAbleCommandHandler("stretch", stretch, pass_args=True)
+VAPOR_HANDLER = DisableAbleCommandHandler("vapor",
+                                          vapor,
+                                          pass_args=True,
+                                          admin_ok=True)
+MOCK_HANDLER = DisableAbleCommandHandler("mock",
+                                         spongemocktext,
+                                         admin_ok=True,
+                                         pass_args=True)
+KIM_HANDLER = DisableAbleCommandHandler("kim",
+                                        kimtext,
+                                        admin_ok=True,
+                                        pass_args=True)
+MAFIA_HANDLER = DisableAbleCommandHandler("mafia",
+                                          mafiatext,
+                                          admin_ok=True,
+                                          pass_args=True)
+PIDOR_HANDLER = DisableAbleCommandHandler("pidor",
+                                          pidortext,
+                                          admin_ok=True,
+                                          pass_args=True)
+HITLER_HANDLER = DisableAbleCommandHandler("hitler",
+                                           hitlertext,
+                                           admin_ok=True,
+                                           pass_args=True)
+ZALGO_HANDLER = DisableAbleCommandHandler("zalgofy", zalgotext, pass_args=True)
+DEEPFRY_HANDLER = DisableAbleCommandHandler("deepfry",
+                                            deepfryer,
+                                            admin_ok=True)
+SHOUT_HANDLER = DisableAbleCommandHandler("shout", shout, pass_args=True)
+INSULTS_HANDLER = DisableAbleCommandHandler("insults", insults, admin_ok=True)
+RUNS_HANDLER = DisableAbleCommandHandler("runs", runs, admin_ok=True)
+SLAP_HANDLER = DisableAbleCommandHandler("slap",
+                                         slap,
+                                         pass_args=True,
+                                         admin_ok=True)
+
+dispatcher.add_handler(MAFIA_HANDLER)
+dispatcher.add_handler(PIDOR_HANDLER)
+dispatcher.add_handler(SHOUT_HANDLER)
+dispatcher.add_handler(OWO_HANDLER)
+dispatcher.add_handler(STRETCH_HANDLER)
+dispatcher.add_handler(VAPOR_HANDLER)
+dispatcher.add_handler(MOCK_HANDLER)
+dispatcher.add_handler(ZALGO_HANDLER)
+dispatcher.add_handler(DEEPFRY_HANDLER)
+dispatcher.add_handler(KIM_HANDLER)
+dispatcher.add_handler(HITLER_HANDLER)
+dispatcher.add_handler(INSULTS_HANDLER)
+dispatcher.add_handler(RUNS_HANDLER)
+dispatcher.add_handler(SLAP_HANDLER)
+n", "yes"):
         sql.set_clean_welcome(str(chat.id), True)
         update.effective_message.reply_text("I'll try to delete old welcome messages!")
         return "<b>{}:</b>" \
