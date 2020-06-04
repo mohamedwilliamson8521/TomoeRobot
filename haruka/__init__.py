@@ -64,6 +64,7 @@ if ENV:
     LASTFM_API_KEY = os.environ.get('LASTFM_API_KEY', None)
     AI_API_KEY = os.environ.get('AI_API_KEY', None)
     WALL_API = os.environ.get('WALL_API', "")
+    sw_api = os.environ.get('sw_api', "")
 
 
 else:
@@ -107,6 +108,7 @@ else:
     BAN_STICKER = Config.BAN_STICKER
     ALLOW_EXCL = Config.ALLOW_EXCL
     API_WEATHER = Config.API_OPENWEATHER
+    spamwatch_api = Config.sw_api
 
 
 SUDO_USERS.add(OWNER_ID)
