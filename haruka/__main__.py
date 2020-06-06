@@ -1,6 +1,7 @@
 import datetime
 import importlib
 import re
+import spamwatch
 from typing import Optional, List
 
 from telegram import Message, Chat, Update, Bot, User
