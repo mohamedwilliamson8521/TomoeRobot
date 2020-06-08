@@ -5,7 +5,7 @@ Can be found on telegram as [Tomoe](https://t.me/TheRealTomoeBot).
 
 A fork of [Haruka Aya](https://gitlab.com/HarukaNetwork/OSS/HarukaAya)
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?=https://github.com/Dank-del/TomoeRobot)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?=https://github.com/mohamedwilliamson8521/TomoeRobot)
 
 ## Thanks to
 
